@@ -17,7 +17,8 @@ coverage/
 
 # Uploaded files (local storage)
 backend/storage/
-storage/
+# Ensure NestJS source module is NEVER ignored
+!backend/src/storage/
 
 # Logs
 *.log
