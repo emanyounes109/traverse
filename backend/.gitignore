@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+
+# Environment files: never commit secrets
+.env
+.env.*
+!.env.example
+
+# Uploaded files (local storage)
+backend/storage/
+storage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Leftovers
+*.bak

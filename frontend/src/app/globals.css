@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #4338ca;
+  --color-primary-hover: #3730a3;
+  --color-primary-soft: #eef0ff;
+  --color-accent: #f5a623;
+  --color-accent-soft: #fff4db;
+  --color-canvas: #f5f3fb;
+  --color-surface: #ffffff;
+  --color-line: #e3dff0;
+  --color-ink: #1e1b3a;
+  --color-muted: #6b6785;
+  --color-success: #2f9e6b;
+  --color-danger: #d64545;
+  /* Dark panel / sidebar background */
+  --color-brand: #272650;
+  /* Steel blue used for completed steps and highlights */
+  --color-steel: #3d6b8a;
+  /* Active item background inside the sidebar */
+  --color-nav-active: #2c4f52;
+}
+
+/* Fonts are injected by next/font as CSS variables in layout.tsx */
+@theme inline {
+  --font-heading: var(--font-jakarta), sans-serif;
+  --font-body: var(--font-inter), sans-serif;
+  --font-mono: var(--font-plex-mono), monospace;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}

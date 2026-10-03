@@ -1,0 +1,478 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────── Enums ─────────────
+
+enum Role {
+  INTERN
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING_APPROVAL
+  DISABLED
+}
+
+enum Permission {
+  CAN_MANAGE_USERS
+  CAN_MANAGE_PROGRAMS
+  CAN_REVIEW_APPLICATIONS
+  CAN_MANAGE_INTERVIEWS
+  CAN_ASSIGN_MENTOR
+  CAN_MANAGE_TASKS
+  CAN_REVIEW_TASKS
+  CAN_CHANGE_INTERNSHIP_STATUS
+  CAN_VIEW_ALL_INTERNS
+  CAN_VIEW_AUDIT
+}
+
+enum DocumentType {
+  CV
+  INTERNSHIP_DOC
+  SUBMISSION
+}
+
+enum ProgramStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum ApplicationStatus {
+  APPLIED
+  UNDER_REVIEW
+  SHORTLISTED
+  INTERVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  RESCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum InterviewResult {
+  PASSED
+  FAILED
+  NEEDS_ANOTHER_ROUND
+}
+
+enum InternshipStatus {
+  ACCEPTED
+  ONBOARDING
+  ACTIVE
+  COMPLETED
+  DROPPED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  APPLICATION_SUBMITTED
+  APPLICATION_STATUS_CHANGED
+  INTERVIEW_SCHEDULED
+  INTERVIEW_RESCHEDULED
+  INTERVIEW_CANCELLED
+  TASK_ASSIGNED
+  TASK_DEADLINE_APPROACHING
+  SUBMISSION_REVIEWED
+  FEEDBACK_RECEIVED
+  MENTOR_ASSIGNED
+  INTERNSHIP_STATUS_CHANGED
+}
+
+// ───────────── Models ─────────────
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String
+  role         Role
+  status       UserStatus @default(PENDING_APPROVAL)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  internProfile InternProfile?
+  staffProfile  StaffProfile?
+
+  documentsOwned    Document[] @relation("DocumentOwner")
+  documentsAsIntern Document[] @relation("DocumentIntern")
+  documentsUploaded Document[] @relation("DocumentUploader")
+
+  programsCreated Program[] @relation("ProgramCreator")
+
+  applications              Application[]              @relation("ApplicationIntern")
+  applicationStatusChanges  ApplicationStatusHistory[] @relation("ApplicationHistoryChangedBy")
+
+  interviewsAsInterviewer   Interview[]        @relation("InterviewInterviewer")
+  interviewHistoryChanges   InterviewHistory[] @relation("InterviewHistoryChangedBy")
+
+  internships               Internship[]              @relation("InternshipIntern")
+  internshipStatusChanges   InternshipStatusHistory[] @relation("InternshipHistoryChangedBy")
+
+  mentorAssignmentsAsMentor     MentorAssignment[] @relation("MentorAssignmentStaff")
+  mentorAssignmentsMade         MentorAssignment[] @relation("MentorAssignmentAssignedBy")
+
+  tasksAssigned   Task[] @relation("TaskIntern")
+  tasksCreated    Task[] @relation("TaskCreator")
+
+  feedbacksGiven      Feedback[]    @relation("FeedbackStaff")
+  taskHistoryChanges  TaskHistory[] @relation("TaskHistoryChangedBy")
+
+  notifications Notification[] @relation("NotificationUser")
+
+  @@index([status])
+  @@index([role])
+}
+
+model InternProfile {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @db.Uuid
+  fullName     String
+  phone        String?
+  contactInfo  String?
+  cvDocumentId String?  @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cvDocument Document? @relation("InternProfileCv", fields: [cvDocumentId], references: [id], onDelete: Restrict)
+
+  @@index([cvDocumentId])
+}
+
+model StaffProfile {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @unique @db.Uuid
+  fullName    String
+  workEmail   String
+  permissions Permission[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+model Document {
+  id           String       @id @default(uuid()) @db.Uuid
+  ownerId      String       @db.Uuid
+  internId     String?      @db.Uuid
+  type         DocumentType
+  storageKey   String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  version      Int
+  groupId      String       @db.Uuid
+  isCurrent    Boolean
+  uploadedById String       @db.Uuid
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  owner      User @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  intern     User? @relation("DocumentIntern", fields: [internId], references: [id], onDelete: Restrict)
+  uploadedBy User @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  internProfilesUsingAsCv InternProfile[] @relation("InternProfileCv")
+  submissions             Submission[]
+
+  @@unique([groupId, version])
+  @@index([ownerId])
+  @@index([internId])
+  @@index([uploadedById])
+  @@index([groupId])
+}
+
+model Program {
+  id                   String        @id @default(uuid()) @db.Uuid
+  name                 String
+  description          String
+  requirements         String
+  applicationOpenDate  DateTime
+  applicationCloseDate DateTime
+  internshipStartDate  DateTime
+  internshipEndDate    DateTime
+  capacity             Int
+  status               ProgramStatus @default(DRAFT)
+  createdById          String        @db.Uuid
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  createdBy User @relation("ProgramCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  applications Application[]
+  internships  Internship[]
+
+  @@index([createdById])
+  @@index([status])
+}
+
+model Application {
+  id        String            @id @default(uuid()) @db.Uuid
+  internId  String            @db.Uuid
+  programId String            @db.Uuid
+  status    ApplicationStatus @default(APPLIED)
+  appliedAt DateTime          @default(now())
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  intern  User    @relation("ApplicationIntern", fields: [internId], references: [id], onDelete: Restrict)
+  program Program @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  statusHistory ApplicationStatusHistory[]
+  interviews    Interview[]
+  internship    Internship?
+
+  @@unique([internId, programId])
+  @@index([internId])
+  @@index([programId])
+  @@index([status])
+}
+
+model ApplicationStatusHistory {
+  id            String             @id @default(uuid()) @db.Uuid
+  applicationId String             @db.Uuid
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  note          String?
+  changedById   String             @db.Uuid
+  createdAt     DateTime           @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  changedBy   User        @relation("ApplicationHistoryChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([applicationId])
+  @@index([changedById])
+  @@index([toStatus])
+}
+
+model Interview {
+  id            String           @id @default(uuid()) @db.Uuid
+  applicationId String           @db.Uuid
+  interviewerId String           @db.Uuid
+  scheduledAt   DateTime
+  status        InterviewStatus  @default(SCHEDULED)
+  result        InterviewResult?
+  notes         String?
+  cancelReason  String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  interviewer User        @relation("InterviewInterviewer", fields: [interviewerId], references: [id], onDelete: Restrict)
+
+  history InterviewHistory[]
+
+  @@index([applicationId])
+  @@index([interviewerId])
+  @@index([status])
+}
+
+model InterviewHistory {
+  id               String           @id @default(uuid()) @db.Uuid
+  interviewId      String           @db.Uuid
+  action           String
+  oldScheduledAt   DateTime?
+  newScheduledAt   DateTime?
+  oldInterviewerId String?          @db.Uuid
+  newInterviewerId String?          @db.Uuid
+  oldStatus        InterviewStatus?
+  newStatus        InterviewStatus?
+  note             String?
+  changedById      String           @db.Uuid
+  createdAt        DateTime         @default(now())
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Restrict)
+  changedBy User      @relation("InterviewHistoryChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([interviewId])
+  @@index([changedById])
+}
+
+model Internship {
+  id            String           @id @default(uuid()) @db.Uuid
+  internId      String           @db.Uuid
+  applicationId String           @unique @db.Uuid
+  programId     String           @db.Uuid
+  status        InternshipStatus @default(ACCEPTED)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  dropReason    String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  intern      User        @relation("InternshipIntern", fields: [internId], references: [id], onDelete: Restrict)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  program     Program     @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  statusHistory     InternshipStatusHistory[]
+  mentorAssignments MentorAssignment[]
+  tasks             Task[]
+
+  @@index([internId])
+  @@index([programId])
+  @@index([status])
+}
+
+model InternshipStatusHistory {
+  id           String           @id @default(uuid()) @db.Uuid
+  internshipId String           @db.Uuid
+  fromStatus   InternshipStatus?
+  toStatus     InternshipStatus
+  note         String?
+  changedById  String           @db.Uuid
+  createdAt    DateTime         @default(now())
+
+  internship Internship @relation(fields: [internshipId], references: [id], onDelete: Restrict)
+  changedBy  User       @relation("InternshipHistoryChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([internshipId])
+  @@index([changedById])
+  @@index([toStatus])
+}
+
+model MentorAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  internshipId String    @db.Uuid
+  staffId      String    @db.Uuid
+  assignedAt   DateTime  @default(now())
+  endedAt      DateTime?
+  assignedById String    @db.Uuid
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  internship Internship @relation(fields: [internshipId], references: [id], onDelete: Restrict)
+  staff      User       @relation("MentorAssignmentStaff", fields: [staffId], references: [id], onDelete: Restrict)
+  assignedBy User       @relation("MentorAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@index([internshipId])
+  @@index([staffId])
+  @@index([assignedById])
+}
+
+model Task {
+  id           String       @id @default(uuid()) @db.Uuid
+  internshipId String       @db.Uuid
+  internId     String       @db.Uuid
+  createdById  String       @db.Uuid
+  title        String
+  description  String
+  deadline     DateTime
+  priority     TaskPriority @default(MEDIUM)
+  status       TaskStatus   @default(PENDING)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  internship Internship @relation(fields: [internshipId], references: [id], onDelete: Restrict)
+  intern     User       @relation("TaskIntern", fields: [internId], references: [id], onDelete: Restrict)
+  createdBy  User       @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  submissions Submission[]
+  feedbacks   Feedback[]
+  history     TaskHistory[]
+
+  @@index([internshipId])
+  @@index([internId])
+  @@index([createdById])
+  @@index([status])
+  @@index([priority])
+  @@index([deadline])
+}
+
+model Submission {
+  id          String   @id @default(uuid()) @db.Uuid
+  taskId      String   @db.Uuid
+  documentId  String   @db.Uuid
+  note        String?
+  version     Int
+  isLate      Boolean
+  submittedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  feedbacks Feedback[]
+
+  @@unique([taskId, version])
+  @@index([taskId])
+  @@index([documentId])
+}
+
+model Feedback {
+  id           String   @id @default(uuid()) @db.Uuid
+  taskId       String   @db.Uuid
+  submissionId String   @db.Uuid
+  staffId      String   @db.Uuid
+  comment      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  task       Task       @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  staff      User       @relation("FeedbackStaff", fields: [staffId], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@index([submissionId])
+  @@index([staffId])
+}
+
+model TaskHistory {
+  id          String      @id @default(uuid()) @db.Uuid
+  taskId      String      @db.Uuid
+  action      String
+  fromStatus  TaskStatus?
+  toStatus    TaskStatus?
+  note        String?
+  changedById String      @db.Uuid
+  createdAt   DateTime    @default(now())
+
+  task      Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  changedBy User @relation("TaskHistoryChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@index([changedById])
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  type      NotificationType
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user User @relation("NotificationUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([userId, readAt])
+}
